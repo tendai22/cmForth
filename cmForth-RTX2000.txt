@@ -1,0 +1,617 @@
+     Page# 1         C:CMFORTH.3  
+ 
+ 
+       0                                                               31
+ 0   cmForth for RTX2000 and RTX2001                                cmForth was originally written for NC4000 by Chuck Moore.
+ 1 ---------------------------------------------------------------- Modified for RTX2000 by Thor-Bjorn Bladh, Lund, Sweden.
+ 2 cmForth was originally written by Chuck Moore for NC4000 chip    Source code listed restored to cmForth style by Jay Melvin.
+ 3   and released to the public domain in March 1985.               Comment screens restored by C. H. Ting.
+ 4 Jay Melvin provided documentation for cmForth in shadow screens  Stack comments:
+ 5   in January 1986.                                               ; ( n)  indicates the cost in machine cycles when executed
+ 6 Chuck Moore modified cmForth and the shadows in Dec. 1987.         a  an address, e.g. head of a thread
+ 7 Thor-Bjorn Bladh, Lund, Sweden modified cmForth to run on          n  is an integer, +32767/-32768, e.g. a vocabulary mask
+ 8   RTX2000 in November 1988. It is distributed with Bladh's         u  means unsigned ( < 65536 ) and  d  is double, i.e. 32-bit
+ 9   INDELKO RTX Forth Kit.                                           #  loop counter (the number of iterations) or a count
+10 Jay Melvin restored the RTX cmForth source code to the style       h  is HERE , address of WORD's buffer & dictionary pointer
+11   used in the original cmForth, in January 1989.                   t  or  f  indicate Boolean truth values, True=-1 False=0
+12 C. H. Ting restored the shadow screen documentation for RTX        ,  ( in comment) shows alternate effects, this or that
+13   cmForth in July 1989.                                            r  is the remainder of a divide
+14 Thor-Bjorn Bladh modified cmForth and the shadows in Aug. 1989     q  is the quotient of a divide
+15 and changed the default mode to RTX2001A in March 1990.          l h  means Low High (exclusive at top) limits of a range
+ 
+       1                                                               32
+ 0 ( cmForth for RTX2001A   90Mar8 by Thor-Bjorn Bladh)             cmForth shadow blocks.  Addresses are in hex;
+ 1                                                                    word timing in parentheses after ; ( cycles).
+ 2 ( Compacting)  4 LOAD   5 LOAD   6 LOAD   7 LOAD                 3 LOAD  compiles the compacting compiler (blocks 4-7).
+ 3                                                                    Block 7 exits in COMPILER vocabulary, anticipates additions.
+ 4 : END   \ RECURSIVE  R>DROP ;
+ 5 : REMEMBER;   CONTEXT 4 -  2@ , ,  \ END ;                       END  terminates a definition.
+ 6                                                                  REMEMBER;  saves vocabulary heads (at compile time).
+ 7 FORTH                                                            FORTH  puts following words in interpretive vocabulary.
+ 8
+ 9 : THRU ( n n)   OVER - FOR  DUP LOAD  1 +  NEXT  DROP ;          THRU  loads a sequence of blocks.
+10 : EMPTY   FORGET REMEMBER;                                       EMPTY  empties the dictionary except for compacting compiler.
+11
+12 HEX
+13 ( ' M* DUP DUP B097 SWAP ! BE16 SWAP 2 + ! BE37 SWAP 4 + !)      Multiply patches for RTX2000. See block 9.
+14 ( ' *  DUP DUP B097 SWAP ! BE16 SWAP 2 + ! A060 SWAP 4 + !)
+15
+ 
+       2                                                               33
+ 0    ( Separated heads)                                            H'  points to the target dictionary's next available address.
+ 1          VARIABLE H'  HEX 2000 , ( relocation)                     0000 (or 2000)  relocates target addresses for RAM (or PROM).
+ 2          : {   dA @  HERE  H' 2@ H !  dA !  H' 2! ;              {  switches to host (and  }  to target) dictionary by exchanging
+ 3          : }   { ;                                                 dictionary pointers and relocation offsets.
+ 4 COMPILER : }   H' @  2 *  ,A  \\ PREVIOUS  80 XOR  SWAP C!  { ;  COMPILER }  compiles an indirect reference for a headless word.
+ 5 FORTH    : forget   SMUDGE ;                                     forget  smudges a word that cannot execute in target dictionary.
+ 6          : RECOVER   -2 ALLOT ;                                  RECOVER  recovers a return semi-colon after an infinite loop.
+ 7          : ADR>CALL ( a - n)   dA @ - U2/ ;                      ADR>CALL  converts an address to a relocated call instruction.
+ 8
+ 9 : SCAN ( a - a)   @ BEGIN  DUP 1 2000 WITHIN WHILE  @ REPEAT ;   SCAN  finds the next word in target dictionary.
+10 : TRIM ( a a - a)   DUP >R  dA @ -  SWAP !  R>                   TRIM  relocates the vocabulary link and erases the smudge bit.
+11    DUP 2 +  DUP C@  DF AND  SWAP C! ;                            CLIP  constructs a target vocabulary and compiles its head into
+12 : CLIP ( a)   DUP BEGIN  DUP SCAN  DUP WHILE  TRIM  REPEAT         target dictionary ( after FORGET in RESET ).
+13    2212 XOR  dA @ -  SWAP !  @ , ;                               PRUNE  relinks the target dictionary to produce a stand-alone
+14 : PRUNE   { CONTEXT 4 -  DUP CLIP  2 + CLIP {                      application (fixing the end-of-vocabulary word)
+15    20 0 2212 2!  EMPTY ;                                           and restores the host dictionary.
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+
+　
+     Page# 2         C:CMFORTH.3  
+ 
+ 
+       3                                                               34
+ 0 ( cmForth RTX2001A  90Mar8)   EMPTY                              3 LOAD  recompiles cmForth.
+ 1 ( Target compiler)  2 LOAD                                       2 LOAD  compiles the target compiler.
+ 2 HEX  2000 1000 0 FILL  2000 H' !                                 Target is compiled at 2000 which is initialized to 0.
+ 3 : BOOT   }   40  FDF FOR  0 @+  2 !+  NEXT  DROP ( reset) 0 ;    BOOT  copies PROM to RAM at power-up and calls reset (Block 23).
+ 4 2040 H !  A000 , A020 ,   2204 H !       2040 2044 E0 MOVE       The interrupt vector area is filled with NOPs and RETURNs.
+ 5 ( SPAN)  F7C0 ,  ( >IN)    0 ,  ( BLK)  0 ,  ( dA) 0 ,              Low RAM is initialized.  See Block 12.
+ 6 ( ?CODE)    0 ,  ( CURSOR) 0 ,  ( BASE) A ,                         These variables will be  MOVEd  by  reset .
+ 7 DECIMAL                                                          #  is the bottom of the target dictionary.
+ 8 ( Nucleus)   : #   R>DROP ;  8 11 THRU   ( Variables)  12 LOAD      PRUNE changes its name to null and link to 0.
+ 9 ( Terminal)    13 14 THRU   ( Output)       15 16 THRU              This version of EXIT marks the end of both vocabulary chains.
+10 ( Disk)        17 18 THRU   ( Interpreter)  19 22 THRU
+11 ( Initialize)  23 24 THRU   ' reset  ADR>CALL  HEX  2012 !       The address of  reset  is relocated into the end of BOOT.
+12 DECIMAL
+13 ( Compiler)    25 30 THRU   } PRUNE   HEX                        Target and host dictionaries are separated by  PRUNE .
+14 : GO   FLUSH  40  7DF FOR  DUP 2000 +  @  SWAP  2 !+  NEXT       GO  emulates  BOOT  for testing:  3 LOAD  GO
+15  DROP 2012 >R ;
+ 
+       4                                                               35
+ 0 ( Optimizing compiler)   HEX                                     FORTH  sets interpretive vocabulary for both searches
+ 1 : FORTH   2 CONTEXT ! ;                                            and definitions.  Words are compiled in definitions.
+ 2 : COMPILER   4 CONTEXT ! ;                                       COMPILER  sets immediate vocabulary.  Words are executed in : .
+ 3 : uCODE ( n)   CREATE ,  DOES  R> @  ,C ;                        uCODE  names an RTX micro-coded instruction. Compiled on use.
+ 4                                                                  \  compiles a following compiler directive that would normally
+ 5 COMPILER  : \   4 -' IF  DROP ABORT" ?"  THEN  ,A ;                 be executed.  Named [COMPILE] in FORTH-83.
+ 6    B001 uCODE R>DROP    BF40 uCODE -1    A000 uCODE NOP
+ 7    A100 uCODE INVERT    E080 uCODE N!    A040 uCODE SWAP-DROP    RTX instructions:
+ 8 FORTH : DUP?   HERE 6 - 2@  D000 AND D000 = NOT  SWAP A0C0 = AND   R>DROP  -1  NOP  SWAP-DROP   Obvious functions.
+ 9            IF  HERE 2 - @  E00 XOR -4 ALLOT   ,C THEN ;          N!  non-destructive store (preserves data but not address).
+10                                                                  INVERT  one's complement of T.
+11 : BRANCH? ( d s - d n t)   BLOCKEND?  dA @ -  FC00 AND
+12    OVER  FC00 AND  DUP                                           DUP?  compacts preceeding  DUP  with current instruction.
+13  IF  - DUP IF  400 =  600  SWAP  ELSE  -1  THEN                  BRANCH?  determines if the destination address is within reach
+14  ELSE  2DROP  400 -1                                               and if so returns the block code for a branch instruction and
+15  THEN ;                                                            a true flag.  Otherwise it returns a dummy and a false flag.
+ 
+       5                                                               36
+ 0    ( Defining words)   HEX                                       PACK  sets the return bit. If the instruction is >R or DUP >R,
+ 1 FORTH     : PACK ( a n)   B0DF AND  B081 =                         it will be converted to PC G! or DUP PC G!. It exits from
+ 2             IF  26 ELSE  20 THEN  SWAP +!  R>DROP ;                EXIT ( R>DROP ).
+ 3 COMPILER  : EXIT   ?CODE @  DUP
+ 4             IF DUP @ B0FF AND B001 =  OVER 2 - @ BE82 =  OR NOT  EXIT  optimizes return if permitted ( ?CODE  nonzero):
+ 5               IF  \\ DUP @  DUP 0<                                 For instructions (bit 15 = 1) it calls  PACK  except
+ 6                 IF  PACK                                           for return stack pops and streamed instructions ( OF( ).
+ 7                 ELSE  2 *  OVER  BRANCH?                           For calls to a valid 1 KB page, it substitutes a branch.
+ 8                   IF SWAP 3FF AND  2 / OR  9000 OR  SWAP ! EXIT    Otherwise it compiles a subroutine return.
+ 9                   THEN  DROP
+10                 THEN  DROP                                       ;  is redefined to use the new  EXIT.
+11               THEN
+12             THEN  DROP  A020 , ;                                 CONSTANT  is also redefined to take advantage of the new  EXIT.
+13
+14           : ;   \ RECURSIVE  R>DROP  \ EXIT ;
+15 FORTH     : CONSTANT ( n)   CREATE -2 ALLOT  \ LITERAL \ EXIT ;
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+　
+     Page# 3         C:CMFORTH.3  
+ 
+ 
+       6                                                               37
+ 0    ( Binary operators)   HEX                                     BINARY  defines and compacts ALU instructions.
+ 1 FORTH : BINARY ( n)   CREATE ,  DOES  R> @  ?CODE @ DUP            If the current instruction is  OVER  or  SWAP  and if the
+ 2 IF  DUP 2 - 2@  FFBF AND AE80 =  SWAP FFBF AND AE80 =  AND         previous is  OVER  or  SWAP  and not a literal, the ALU code
+ 3  IF  DUP 4 - @  D000 AND  D000 XOR                                 is merged. MAX  and  MIN  are the only words in cmForth that
+ 4   IF  2 -  DUP 2@  -  C0 AND  80 XOR                               benefit from this part of  BINARY . See block 11.
+ 5       >R  SWAP  R> XOR  SWAP !  -2 DUP  ALLOT  ?CODE +!  EXIT      Caution!  SWAP SWAP alu-op is compiled as OVER OVER alu-op.
+ 6   THEN
+ 7  ELSE  DUP @  DUP B000 >  SWAP  F80 AND  E00 =  AND                If the current instruction is a valid candidate and has not
+ 8   IF  SWAP F00 AND  DUP 600 AND  400 =  IF  800 XOR  THEN          already been merged, the ALU code is extracted and checked
+ 9       SWAP DUP 4 -  2@  D000 AND D000 = NOT  SWAP A0C0 = AND       for  -  and  SWAP-  , which must be interchanged.
+10    IF  DUP @  >R  DUP  DUP 2 +  @  SWAP  !  2 -  SWAP  R>          If the previous cell is  DUP  and not a literal, it will be
+11        -2 DUP  ALLOT  ?CODE +!                                     compacted. Long literal values are cared for.
+12    ELSE   SWAP  80 XOR  OVER @
+13    THEN  F0FF AND  XOR  SWAP !  EXIT
+14  THEN THEN
+15 THEN  DROP ,C ;                                                    If no merge takes place the ALU is compiled as defined.
+ 
+       7                                                               38
+ 0    ( Binary operators, continued)   HEX                          SHIFT  defines and compacts shift instructions.
+ 1 FORTH                                                              Shift, rotation and sign extension can be merged with
+ 2 : SHIFT ( n)   CREATE ,  DOES  R> @  ?CODE @ DUP                   ALU instructions.
+ 3   IF  @ DUP  F01F AND  A000 =
+ 4     IF  XOR  ?CODE @  !  EXIT                                    +  -  SWAP-  AND  OR  XOR   6 basic RTX ALU functions.
+ 5     THEN
+ 6   THEN  DROP  A000 XOR  ,C ;                                     C!+  stores a byte and increment the address.
+ 7                                                                  C@+  fetches a byte and increment the address.
+ 8 COMPILER  A840 BINARY +  AA40 BINARY XOR  A640 BINARY OR         G!  stores to a register or an ASIC peripheral device.
+ 9           AC40 BINARY -  A240 BINARY AND  A440 BINARY SWAP-      >R  pops T and pushes it on the return stack.
+10
+11 : C!+   F9C0 SHORT ;   : G!   BE80 SHORT  DUP? ;                 2*  2/  0<  Obvious functions.
+12 : C@+   F940 SHORT ;   : >R   BE81 ,C  DUP? ;                    cU2/  shifts T right one bit and fills MSB with carry.
+13                                                                  U2/  shifts T right one bit and clears MSB.
+14 2 SHIFT 2*  7 SHIFT 2/  1 SHIFT 0<  4 SHIFT cU2/  6 SHIFT U2/
+15
+ 
+       8                                                               39
+ 0 ( Nucleus)   HEX                                                 ROT  is a slow way to reference into the stack.
+ 1 : ROT ( n n n - n n n)   >R SWAP  R> SWAP ; ( 5)
+ 2                                                                  0=  returns false (0) if stack non-zero; otherwise true (-1).
+ 3 : 0= ( n - t)   IF  0 EXIT  THEN -1 ; ( 3)                       NOT  same as 0=. Forth-83 want's one's complement.
+ 4 : NOT ( n - t)   0= ; ( 4)                                       <  >  subtract and test sign bit. Range of difference limited
+ 5 : < ( n n - t)   - 0< ; ( 2)                                       to 15 bits, -32768 is not less than 32767.
+ 6 : > ( n n - t)   SWAP- 0< ; ( 2)                                 =  equality test by XOR.
+ 7 : = ( n n - t)   XOR 0= ; ( 5)                                   U<  unsigned compare with 16 bit range (0 is less then 65535).
+ 8 : U< ( u u - t)   - cU2/ INVERT 0< ; ( 3)
+ 9                                                                  { ... }  surround words used by the host dictionary.
+10 { COMPILER                                                        Used during compilation, they will not be in target dictionary.
+11 A SHIFT D2*
+12 A41A uCODE U/1'   A45A uCODE U/'    A458 uCODE U/''              D2*  left-shifts T and N.
+13                   A89D uCODE *'     A49D uCODE *''               U/1'    U/'    U/''    First, main and last divide steps.
+14 FORTH }                                                                  *'     *''     Main and last signed multiply steps are
+15                                                                                           needed for RTX2001A. See block 9.
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+
+　
+     Page# 4         C:CMFORTH.3  
+ 
+ 
+       9                                                               40
+ 0    ( Multiply, divide)                                           M/MOD  divides d by n.  Leave quotient and
+ 1 : M/MOD ( l h u - q r)   4 G!  0 +  D2*  U/1' 13 OF( U/' U/'' ;    remainder on stack.  Order reversed from Forth-83.
+ 2 ( 22)                                                            M/  signed double dividend by unsigned.
+ 3 : M/ ( l h u - q)   OVER 0< IF  DUP >R + R>  THEN  M/MOD DROP ;
+ 4 ( 26-29)
+ 5 HEX                                                              M*  multiplies two signed integers to form a double product.
+ 6                                                                  /MOD  divide unsigned integers and return both remainder
+ 7 : M* ( n n - d)  4 G!  0  0 +  E OF( *'  *'' ; ( 22)               and quotient.
+ 8 ( : M*   DUP 17 G!  16 G@ 17 G@ ; ( 4                  RTX2000)  MOD  remainder of unsigned integer division.
+ 9 : /MOD ( u u - r q)   0 SWAP  M/MOD  SWAP ; ( 26)
+10 : MOD ( u u - r)   /MOD  DROP ; ( 28)                            */  ratio of n times n' over u.
+11                                                                  *  signed multiply.
+12 : */ ( n n u - q)   >R  M*  R>  M/ ; ( 33-36)                    /  signed divide.
+13 : *  ( n n - n)   4 G!  0  0 +  E OF( *'  *'' DROP ; ( 23)
+14 ( : *   DUP 17 G!  16 G@  SWAP-DROP ; ( 4              RTX2000)
+15 : / ( n u - q)   >R  DUP 0<  R>  M/ ; ( 30-33)
+ 
+      10                                                               41
+ 0    ( Memory reference operators)                                 +!  increments the value at  a  by  n .
+ 1 : +! ( n a)   0 @+  >R  +  R>  ! ; ( 8)
+ 2 : C! ( n a)   C! ; ( 2)                                          C!  stores 8 bit data into  a .
+ 3 : C@ ( a - n)   C@ ; ( 2)                                        C@  fetches 8 bit data from  a .
+ 4 : 2@ ( a - d)   2 @+  @  SWAP ; ( 6)
+ 5 : 2! ( d a)   2 !+  ! ; ( 5)                                     2@  fetches 2 16 bit numbers, lower address on top.
+ 6                                                                  2!  stores 2 16 bit numbers.
+ 7 { HEX COMPILER : -ZERO ( a - a' a)   2 + \ BEGIN 9000 , ;
+ 8       FORTH }                                                    -ZERO  skips first round in a loop.
+ 9
+10 : MOVE ( s d #)   >R  4 G!  BEGIN  -ZERO                         MOVE  copies a range of 16 bit integers.
+11       2 @+  SWAP  4 G@  2 !+  4 G! THEN  NEXT  DROP ; ( 8* 6+)
+12                                                                  FILL  fills # bytes with number n , starting at a .
+13 : FILL ( a # n)   4 G!  FOR  -ZERO  4 G@  SWAP 1 C!+ THEN NEXT
+14    DROP ; ( 5* 6+)
+15
+ 
+      11                                                               42
+ 0    ( Words)                                                      EXECUTE  executes code at an address by returning.
+ 1 : EXECUTE ( a)   >R ; ( 1)                                       CYCLES  delays n+4 cycles.
+ 2 : CYCLES ( n)   FOR  NEXT ; ( 4 n +)
+ 3 : ?DUP ( n - n n, 0)   DUP IF  DUP EXIT  THEN ; ( 4)             2DUP  treats the registers  N  &  T  as a pair.
+ 4 : 2DUP ( d - d d)   OVER OVER ; ( 3)                             ?DUP  frequently precludes  DROP  after  IFs .
+ 5 : 2DROP ( d)   DROP DROP ; ( 3)                                  2DROP  Discard 2 integers from the stack.
+ 6
+ 7 : WITHIN ( n l h - t)   OVER - >R  - R> U< ;                     WITHIN  returns true if number within low (inclusive) and
+ 8 : ABS ( n - u)   DUP 0< IF  NEGATE EXIT  THEN ; ( 4)               high (exclusive) limits;  all numbers 16 bits and signed.
+ 9                                                                  ABS  returns positive number, 16 bits.
+10 : MAX ( n n - n)   OVER OVER - 0< IF  BEGIN  SWAP-DROP ; ( 4)    MAX  returns larger of pairs; 15 bit range.
+11 : MIN ( n n - n)   OVER OVER - 0< UNTIL  THEN DROP ; ( 4)        MIN  returns smaller.  Interwining code saves 2 cycles;
+12                                                                    left in as an illustration of obscure but efficient code.
+13                                                                    See block 6.
+14
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+　
+     Page# 5         C:CMFORTH.3  
+ 
+ 
+      12                                                               43
+ 0    ( RAM allocation)   HEX                                       ARRAY  defines an array that doubles an index from stack
+ 1 { : ARRAY ( n)   CONSTANT  A022 USE ;                              in only 1 cycle.  Similar to VARIABLE.
+ 2 ( Block in each buffer)    0 ARRAY BUFFERS                       These low RAM variables are used by cmForth.
+ 3 ( Last referenced buffer)  4 CONSTANT PREV                         Change them cautiosly!.  In particular, make sure a variable
+ 4 ( Oldest loaded buffer)    6 CONSTANT OLDEST }                     is not used during compilation.  For example, HEX is redefined
+ 5                                                                    to set BASE.  It can be used if BASE has not moved;
+ 6 ( Number of buffers)       2 1 - CONSTANT NB                       otherwise it must be  'forget'ted.
+ 7 ( TextInputBuffer)         8 CONSTANT TIB
+ 8                                                                  Non-standard variables:
+ 9 ( Initialized)                                                   ?CODE  address of last instruction compiled.
+10  A CONSTANT SPAN        C CONSTANT >IN      { E CONSTANT BLK }     Zero indicates no compaction permitted; e.g. after THEN.
+11 10 CONSTANT dA                                                   dA  offset to be added to compiled address.  Normally 0.
+12 12 CONSTANT ?CODE      14 CONSTANT CURSOR                          Relocated code cannot be executed.
+13 16 CONSTANT BASE       18 CONSTANT H                             CURSOR  tracks terminal cursor; used by EXPECT.
+14 1A CONSTANT C/B        20 CONSTANT CONTEXT                       C/B  cycles/bit for serial I/O.
+15
+ 
+      13                                                               44
+ 0    ( Terminal I/O)   HEX                                         EMIT  transmits a byte through the BOOT pin via bit 3
+ 1 : EMIT ( n)   100 OR  10 *  9 FOR                                  in the Configuration Register CR.  It emits bits at C/B rate.
+ 2    DUP 8 AND  10 OR  3 G!  2/  C/B @  A - CYCLES NEXT DROP ;
+ 3 : CR   D EMIT  A EMIT ;                                          CR  emits carriage-return and line-feed.
+ 4                                                                  EVEN  aligns an odd address or count to the next even.
+ 5 : EVEN ( n - n, n')   1 +  FFFE AND ;                            TYPE  types a string with prefixed count byte.  It returns an
+ 6 : TYPE ( a - a)   1 C@+  SWAP 1 - FOR  1 C@+  SWAP EMIT            incremented address.  This is not Forth-83 standard.
+ 7    NEXT EVEN ;
+ 8                                                                  RX  reads a bit from EI1 pin.
+ 9 { : RX ( - n) }   B G@  1C0 XOR ;                                KEY  reads an ASCII character from EI1.
+10 : KEY ( - n)   0  BEGIN  RX 0= UNTIL  C/B @  DUP U2/ +  7 FOR      It waits for a start bit, then delays until the middle of
+11    F - CYCLES  2/  RX IF  80 ELSE  0 THEN  OR  C/B @ NEXT          the first data bit.  Each bit is sampled then OR'ed into
+12    BEGIN  RX UNTIL  DROP ;                                         bit 7 of the accumulated byte.  It does not exit until the
+13                                                                    stop bit (low) is detected.
+14
+15
+ 
+      14                                                               45
+ 0    ( Serial EXPECT)   HEX                                        SPACE  emits a space.
+ 1 : SPACE   20 EMIT ;                                              SPACES  emits n>0 spaces.  Non-positive counts do nothing.
+ 2 : SPACES ( n)   0 MAX  FOR  -ZERO SPACE  THEN NEXT ;             HOLD  holds characters on the stack, maintaining a count.
+ 3 : HOLD ( ..# x n - ..# x)   SWAP >R  SWAP 1 + R> ;                 It reverses the digits results from number conversions.
+ 4
+ 5 : EXPECT ( a #)   SWAP CURSOR !                                  EXPECT  accepts keystrokes and buffers them at TIB.
+ 6    1 - DUP FOR  KEY  DUP 8 XOR IF                                  An 8 will discard a character and emit a backspace;
+ 7       DUP D XOR IF  DUP  CURSOR @ 1 C!+  CURSOR !  EMIT            a D will emit a space and exit;
+ 8          ELSE  SPACE  DROP  R> - SPAN !  EXIT THEN                 all other keys are stored and echoed until the count is
+ 9    ELSE ( 8)  DROP  DUP I XOR [ OVER ] UNTIL                       exhausted.  Actual count is in SPAN.
+10       CURSOR @ 1 -  CURSOR !  R> 2 + >R  8 EMIT
+11    THEN NEXT 1 + SPAN ! ;
+12
+13
+14
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+
+　
+     Page# 6         C:CMFORTH.3  
+ 
+ 
+      15                                                               46
+ 0    ( Numbers)                                                    DIGIT  converts a digit 0-F into an ASCII character.
+ 1 : DIGIT ( n - n)   DUP 9 >  7 AND +  48 + ;                      <#  starts conversion by tucking a count under the number.
+ 2 : <# ( n - ..# n )   -1 SWAP ;                                   #>  ends conversion by emitting the string of digits.
+ 3 : #> ( ..# n)   DROP FOR  EMIT NEXT ;                            SIGN  stacks a minus sign, if needed.
+ 4 : SIGN ( ..# n n - ..# n)   0< IF  45 HOLD  THEN ;               #  converts the low-order digit of a 16 bit number.
+ 5 : # ( ..# n - ..# n)   BASE @ /MOD  SWAP DIGIT HOLD ;            (.)  formats a signed number.
+ 6 : #S ( ..# n - ..# 0)   BEGIN  #  DUP 0= UNTIL ;                 .  displays a 16 bit signed integer, followed by a space.
+ 7 : (.) ( n - ..# n)   DUP >R ABS  <# #S  R> SIGN ;
+ 8 : . ( n)   (.) #> SPACE ;                                        U.R  displays a right-justified 16 bit unsigned number.
+ 9                                                                  U.  displays an unsigned number.
+10 : U.R ( u n)   >R  <# #S  OVER R> SWAP-  1 - SPACES  #> ;
+11 : U. ( u)   0 U.R  SPACE ;                                       DUMP  displays an address and 8 numbers from memory.  It returns
+12 : DUMP ( a - a)   CR  DUP 5 U.R SPACE  7 FOR                       an incremented address for a subsequent DUMP.
+13    2 @+ SWAP  7 U.R  NEXT SPACE ;
+14
+15
+ 
+      16                                                               47
+ 0    ( Strings)   HEX                                              HERE  returns next address in dictionary.
+ 1 : HERE ( - a)   H @ ;
+ 2                                                                  abort"  types the current word at HERE and an error message
+ 3 { : abort" ( - n,) }   H @ TYPE  SPACE  R> TYPE  2DROP             at I.  It also returns the current BLK to locate an error
+ 4    BLK @  ?DUP DROP  ( QUIT) 0 ;                                   during LOAD.  It will end with QUIT, when defined.  It is
+ 5                                                                    a headless definition, referenced only by ABORT".
+ 6 { : dot" }   R> TYPE  >R ;
+ 7                                                                  dot"  types a message whose address is pulled off the return
+ 8 { COMPILER : ABORT"   COMPILE abort"  22 STRING ;                  stack, incremented and replaced.
+ 9            : ."   COMPILE dot"  22 STRING ;
+10   FORTH }                                                        ABORT"  compiles abort" and the following string.
+11                                                                  ."  compiles dot" and the following string.
+12                                                                    These are host COMPILER definitions.  The target definitions
+13                                                                    are in block 30.
+14
+15
+ 
+      17                                                               48
+ 0    ( 15-bit buffer manager)                                      ADDRESS  calculates a buffer address from buffer number.
+ 1 { : ADDRESS ( n - a) }   62 +  1024 * ;
+ 2 { : ABSENT ( n - n, a) }   NB FOR  DUP I BUFFERS @ XOR  2* WHILE ABSENT  returns the block number when the requested block isn't
+ 3      NEXT EXIT THEN  R> PREV N!  R>DROP SWAP-DROP  ADDRESS ;       already in RAM.  Otherwise it returns the buffer address
+ 4                                                                    and exits from BLOCK.
+ 5 { : UPDATED ( - a n) }   OLDEST @  BEGIN  1 +  NB AND
+ 6       DUP PREV @ XOR UNTIL   OLDEST N!  PREV N!                  UPDATED  returns the buffer address and current block number if
+ 7    DUP ADDRESS  SWAP BUFFERS  DUP @                                the pending buffer has been UPDATEd.  Otherwise it returns
+ 8    8192 ROT !  DUP 0< NOT IF  R>DROP DROP THEN ;                   the buffer address and exits from the calling routine
+ 9                                                                    (BLOCK or BUFFER).  Pending means oldest by not just used.
+10   : UPDATE   PREV @ BUFFERS  0 @+ SWAP  32768 OR  SWAP ! ;
+11 { : ESTABLISH ( n a - a) }   SWAP  OLDEST @  PREV N!             ESTABLISH  stores the block number of the current buffer.
+12    BUFFERS ! ;
+13   : IDENTIFY ( n a - a)   SWAP  PREV @ BUFFERS ! ;               IDENTIFY  stores a block number into the current buffer.
+14                                                                    Used to copy blocks.
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+　
+     Page# 7         C:CMFORTH.3  
+ 
+ 
+      18                                                               49
+ 0    ( Disk read/write)                                            ##  emits 3 bytes to host to start a block transfer:
+ 1 { : ## ( a n - a a #) }   0 EMIT  256 /MOD EMIT EMIT  DUP 1023 ;   0 followed by a block number.
+ 2
+ 3 { : buffer ( n - a) }   UPDATED  ## FOR                          buffer  transmits an updated block and awaits acknowledgement.
+ 4       1 C@+ SWAP  EMIT  NEXT  KEY 2DROP ;                        BUFFER  returns address of an empty but assigned buffer.
+ 5   : BUFFER ( n - a)   buffer ESTABLISH ;
+ 6                                                                  block  reads a block.
+ 7 { : block ( n a - n a) }   OVER  ## FOR  KEY  SWAP 1 C!+         BLOCK  returns the buffer address of a specified block, writing
+ 8       NEXT DROP ;                                                  and reading as necessary.
+ 9   : BLOCK ( n - a)   ABSENT buffer  block ESTABLISH ;
+10                                                                  FLUSH  forces buffers to be written to disk.
+11   : FLUSH   NB FOR  8192 BUFFER DROP  NEXT ;                     EMPTY-BUFFERS  clears buffer IDs, without writing.
+12   : EMPTY-BUFFERS   0  [ NB 3 + ] LITERAL  0 FILL  FLUSH ;
+13
+14
+15
+ 
+      19                                                               50
+ 0 ( Interpreter)                                                   LETTER  moves a string of characters from address a to
+ 1 { : LETTER ( b a # - b a) }   FOR  DUP C@  6 G@  XOR WHILE         address b.  Terminated by count # or delimiter in
+ 2     1 C@+ >R  SWAP  1 C!+  R> NEXT  EXIT THEN                      register 6.  Input pointer >IN is advanced.
+ 3     >IN @  R> -  >IN ! ;
+ 4                                                                  -LETTER  scans the source string for a non-delimiter.
+ 5 { : -LETTER ( b a # - b a) }   ?DUP IF  1 - FOR                    If found, calls LETTER.
+ 6     1 C@+  SWAP  6 G@ XOR  0= WHILE  NEXT  EXIT THEN
+ 7     1 -  R> LETTER  THEN ;                                       WORD  locates text in either a block buffer or TIB (BLK=0).
+ 8                                                                    Reads word into HERE prefixing count and suffixing a space.
+ 9 : WORD ( n - a)   >R  H @  DUP  DUP 1 +  DUP  >IN @
+10    BLK @ IF
+11       BLK @ BLOCK +  1024  ELSE  TIB @ +  SPAN @  THEN
+12    >IN @  OVER >IN !  -  R> 6 G!
+13    -LETTER  DROP 32 OVER C!  SWAP-  SWAP C! ;
+14
+15
+ 
+      20                                                               51
+ 0    ( Dictionary search)                                          SAME  compares the string at HERE with a name field.
+ 1 { : SAME ( h a - h a f, a t) }   OVER 4 G!  DUP 2 +                Byte count is in register 6.  High bit of each byte is
+ 2      6 G@ FOR  1 C@+  SWAP 127 AND  4 G@  1 C@+  4 G!  - IF        ignored.  Returns address of parameter field: requires
+ 3         R>DROP  0 AND  EXIT  THEN                                  indirect reference if high bit of count set (separated heads).
+ 4      NEXT  EVEN  SWAP 2 + @ 0< IF  @  THEN SWAP ;
+ 5                                                                  COUNT  extracts the byte count from the first byte of a string.
+ 6 { : COUNT ( n - n)   31 AND ; }
+ 7 { : HASH ( n - a) }   CONTEXT SWAP- ;                            HASH  returns the address of the head of a vocabulary.
+ 8 { : -FIND ( h n - h t, a f) }   HASH  OVER C@  COUNT  6 G!
+ 9      BEGIN  @  DUP WHILE  SAME UNTIL  0 EXIT THEN  -1 XOR ;      -FIND  searches a vocabulary for match with HERE.  Fails with
+10                                                                    zero link field.
+11
+12
+13
+14
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+
+　
+     Page# 8         C:CMFORTH.3  
+ 
+ 
+      21                                                               52
+ 0    ( Number input)   HEX                                         -DIGIT  converts an ASCII character to a digit 0-F.
+ 1 : -DIGIT ( n - n)   30 -  DUP 9 >                                  Failure to convert generates an error message.
+ 2    IF  7 -  DUP A < OR  THEN
+ 3    DUP BASE @ U< IF  EXIT  THEN                                  NUMBER  converts given string to binary; stores BASE in
+ 4    2DROP  ABORT" ?" ;  RECOVER                                     register 4; saves minus sign; terminates on count; and
+ 5                                                                    then applies sign.
+ 6 : NUMBER ( a - n)   BASE @ 4 G!  0 SWAP  DUP 1 + C@ 2D = >R
+ 7    DUP  I -  1 +  6 G!  C@  I + 1 -
+ 8    FOR   4 G@  *  6 G@  1 C@+  6 G!  -DIGIT  + NEXT
+ 9    R> IF  NEGATE  THEN ;
+10
+11
+12
+13
+14
+15
+ 
+      22                                                               53
+ 0    ( Control)                                                    -'  searches vocabulary for following word.
+ 1 : -' ( n - h t, a f)   32 WORD  SWAP -FIND ;
+ 2 : ' ( - a)   CONTEXT @ -' IF  DROP ABORT" ?"  THEN ; forget      '  returns address of following word in current vocabulary.
+ 3                                                                    Displays error message on failure.
+ 4 : INTERPRET ( n n)   >IN 2!  BEGIN  2 -' IF  NUMBER                Use 'forget' to prevent using this version in target
+ 5    ELSE  EXECUTE  THEN AGAIN ;  RECOVER                            compilation.
+ 6
+ 7 : QUIT  BEGIN CR  TIB @ 64 EXPECT                                INTERPRET  accepts block number and offset.  Searches FORTH
+ 8    0 0 INTERPRET ." ok"  AGAIN ;  RECOVER                          and executes words found; otherwise converts to binary.
+ 9
+10 ' QUIT ADR>CALL  ' dot" 2 -  !                                   QUIT  accepts a character string into the text input buffer,
+11                                                                    interprets and replies 'ok' to signify success; repeats.
+12                                                                    The address of QUIT is relocated into the end of abort" .
+13
+14
+15
+ 
+      23                                                               54
+ 0    ( Initialize)   HEX                                           FORGET  restores HERE and vocabulary heads to values
+ 1 : FORGET   R>  DUP 4 + H !  2@ CONTEXT 4 - 2!                      saved at compile time by REMEMBER; .
+ 2    2 CONTEXT ! ;
+ 3                                                                  BPS  awaits a start bit, assumes the first data bit is
+ 4 { : BPS }   5 BEGIN  RX 0= UNTIL  BEGIN  6 +  RX UNTIL             zero and the second is one and computes C/B.  Type a 'B'
+ 5    U2/ C/B ! ;                                                     or other ASCII code with bit pattern XXXX XX10.
+ 6
+ 7 { : reset }   10 3 G!  18 3 G!  ( RESET) 0                       reset  is executed at power-up or reset.
+ 8    204 A 7 MOVE  TIB 2@ XOR                                        Toggles BOOT pin to switch from PROM to RAM and
+ 9    IF  EMPTY-BUFFERS  SPAN @ TIB !  THEN                           to double speed. Initializes low RAM variables.
+10    BPS  ." hi"  QUIT ;                                             Empties buffers at power-up only (TIB contains garbage).
+11                                                                    Calibrates serial I/O.  For systems with fixed baudrate,
+12                                                                    BPS  can be replaced with  n C/B ! . For 9600 b/s at 6 MHz
+13                                                                    n is 271 hex.
+14                                                                    Sends cheerful 'hi' and awaits command.
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+　
+     Page# 9         C:CMFORTH.3  
+ 
+ 
+      24                                                               55
+ 0    ( Words)                                                      This is the beginning of the compiler.
+ 1 : SWAP   SWAP ;   : OVER   OVER ;                                  A turn-key application might need only the code above.
+ 2 : DUP   DUP ;     : DROP   DROP ;
+ 3                                                                  Common words are defined for both interpreter and compiler.
+ 4 : XOR   XOR ;     : AND   AND ;
+ 5 : OR   OR ;                                                      Number base words defined together;  DECIMAL required.
+ 6 : +   + ;         : -   - ;
+ 7 : 0<   0< ;       : NEGATE   NEGATE ;                            LOAD  saves current input pointers, calls INTERPRET, restores
+ 8                                                                    input pointers and returns to DECIMAL.  >IN and BLK are
+ 9 : @   @ ;         : !   ! ;                                        treated as a 32 bit pointer.  Forget it so that host LOAD
+10                                                                    can still be used.
+11 : OCTAL   8 BASE ! ;  forget
+12 : DECIMAL   10 BASE ! ;  forget
+13 : HEX   16 BASE ! ;  forget
+14 : LOAD ( n -)   >IN 2@ >R >R  0 INTERPRET  10 BASE !
+15    R> R> >IN 2! ;  forget
+ 
+      25                                                               56
+ 0 ( Compiler)   HEX                                                \\  breaks code compaction.
+ 1 : \\   0 ?CODE ! ;                                               ALLOT  increments the dictionary pointer to allot memory.
+ 2 : ALLOT ( n)   H +! ;                                            ,  compiles a number into the dictionary.
+ 3 : , ( n)   H @ ! 2 ALLOT ;                                       ,C  compiles an instruction available for compaction.
+ 4 : ,C ( n)   H @ ?CODE ! , ;                                      ,A  compiles an address relocated by dA as a call instruction.
+ 5 : ,A ( a)   dA @ - U2/ ,C ;                                      LITERAL  compiles a number as a short literal if possible.
+ 6 COMPILER : LITERAL ( n)   DUP -20 AND IF  DE00 ,C , EXIT         [  stops compilation by popping the return stack, thus
+ 7            THEN BE40 OR ,C ;                                       returning out of the infinite ] loop.
+ 8          : [   R>DROP ;
+ 9 FORTH    : ]   BEGIN 4 -' IF  2 -FIND IF  NUMBER \ LITERAL       ]  unlike INTERPRET, searches both vocabularies before falling
+10    ELSE DUP @                                                      into NUMBER. When a word is found in COMPILER, it is
+11       DUP A020 AND  A020 =  OVER F020 AND  C020 =  OR              executed;  if found in FORTH, it is compiled.  If it is a
+12       SWAP BE27 =  XOR IF  @ 20 XOR  ,C ELSE  ,A  THEN THEN        single instruction, it is placed in-line; otherwise its
+13    ELSE EXECUTE THEN AGAIN ;  RECOVER                              address is compiled as a call.
+14
+15
+ 
+      26                                                               57
+ 0    ( Compiler)   HEX                                             PREVIOUS  returns the address and count of the name field
+ 1 : PREVIOUS ( - a n)   CONTEXT @ HASH  @ 2 +  0 C@+ SWAP ;          of the word just compiled in the current vocabulary.
+ 2 : USE ( n)   PREVIOUS  COUNT +  1 +  EVEN  ! ;                   USE  assigns to the previous word the specified code.
+ 3 : DOES   R>  U2/  USE ;                                          DOES  provides a behavior for a newly defined word.  It is
+ 4 : SMUDGE   PREVIOUS  20 XOR  SWAP C! ;                             executed when that word is defined.
+ 5 : EXIT   R>DROP ;                                                SMUDGE  smudges the name field to avoid recursion.
+ 6                                                                  EXIT  returns from a definition early (FORTH version).
+ 7 : COMPILE   R>  2 @+  >R  2*  ,A ;
+ 8                                                                  COMPILE  pops the address of the following word and compiles it.
+ 9 COMPILER : EXIT   A020 ,C ;                                      EXIT  compiles a return instruction (COMPILER version).
+10          : RECURSIVE   PREVIOUS DF AND  SWAP C! ;                RECURSIVE  unsmudges the name field so a new word can be found.
+11          : ;   \ RECURSIVE  R>DROP  \ EXIT ;  forget             ;  terminates a colon definition.
+12
+13
+14
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+
+　
+     Page# 10         C:CMFORTH.3  
+ 
+ 
+      27                                                               58
+ 0    ( Defining words)   HEX                                       CREATE  creates an entry in the dictionary.
+ 1 FORTH                                                              It saves space for the link field, then fetches a word
+ 2 : CREATE   H @ 0 ,  20 WORD  CONTEXT @ HASH                        terminated by a space.  It links the word into the proper
+ 3    2DUP @  SWAP 2 - !  SWAP C@  COUNT 1 +  EVEN  ALLOT             vocabulary, allots space for the name field and compiles
+ 4    !  BE27 , ;                                                     return-next-address instruction appropriate for a variable.
+ 5 : : CREATE   -2 ALLOT  SMUDGE  \\  ] ;  forget
+ 6 : CONSTANT ( n)   CREATE  -2 ALLOT  \ LITERAL  \ EXIT ;          :  creates a definition; -2 ALLOT recovers instruction
+ 7 : VARIABLE   CREATE  0 , ;                                         compiled by CREATE;  ] compiles the definition in its place.
+ 8                                                                  CONSTANT  names a number by compiling a literal.
+ 9 : BLOCKEND? ( s - s, s')   DUP 3FF AND  3FE = IF  2 + THEN ;     VARIABLE  initializes its variable to zero.
+10
+11 : MEMBLOCK ( d s - n)   BLOCKEND?  FC00 AND  OVER FC00 AND  -    BLOCKEND?  adds 2 to a source address if it is the last cell
+12  DUP  IF  0< IF  200  ELSE  600  THEN                              of the current 1 KB block.
+13       THEN  SWAP 3FF AND 2/ OR ;                                 MEMBLOCK  returns a number with the memory block control code
+14                                                                    and a 9 bit cell address so that a branch or loop instruction
+15                                                                    can compile its destination address correctly.
+ 
+      28                                                               59
+ 0    ( uCODE)   HEX                                                -SHORT  checks if last instruction was a 5 bit literal.
+ 1 : -SHORT ( - n t)   ?CODE @  @  DUP FFE0 AND  BE40 XOR ;         FIX  merges 5 bit literal with a new instruction.
+ 2 : FIX ( n n -)   1F AND  OR  ?CODE @  ! ;
+ 3 : SHORT ( n)   -SHORT IF  2DROP ABORT" n?"  THEN FIX ;           SHORT  requires 5 bit literal for register, address or increment
+ 4                                                                    for current instruction.
+ 5 COMPILER
+ 6 : @  -SHORT IF DROP EE00 ,C ELSE 2/ CE00 SWAP FIX THEN ; forget  @  and  !  compiles a 5 bit or stack-address instruction.
+ 7 : !  -SHORT IF DROP EE80 ,C ELSE 2/ CE80 SWAP FIX THEN ; forget  G@  and  G!  compile register fetch/store instructions.
+ 8 : G@   BE00 SHORT ;                                              @+  !+  compiles 5 bit increment instructions.
+ 9 : G!   BE80 SHORT ;                                              R>  and  >R  pop and push the return stack, respectively.
+10                                                                  I  copies the return stack onto the parameter stack.
+11 : @+   E940 SHORT ;
+12 : !+   E9C0 SHORT ;                                              OF(  pushes the return stack to repeat the next instruction
+13 : R>   BE01 ,C ;      : >R   BE81 ,C ;                             for n+1 cycles.
+14 : I   BE00 ,C ;       : OF(   BE82 ,C ; forget
+15
+ 
+      29                                                               60
+ 0    ( Structures)   HEX                                           OR,  compiles an address specification for a
+ 1 FORTH { : OR, ( a n) }   \\  SWAP  HERE  MEMBLOCK OR , ;           backward jump instruction.
+ 2                                                                  BEGIN  saves HERE for a backward jump.
+ 3 COMPILER
+ 4 : BEGIN ( - a)   H @  \\ ;                                       UNTIL  compiles a conditional backward jump.
+ 5 : UNTIL ( a)   8800 OR, ;                                        AGAIN  compiles an unconditional backward jump.
+ 6 : AGAIN ( a)   9000 OR, ;                                        THEN  adds address specification to a forward jump instruction.
+ 7 : THEN ( a)   \ BEGIN  OVER  MEMBLOCK SWAP +! ;                  IF  compiles a conditional forward jump.
+ 8 : IF ( - a)   \ BEGIN  8800 , ;                                  WHILE  compiles a conditional forward jump out of a structure.
+ 9 : WHILE ( a - a a)   \ IF  SWAP ;                                REPEAT  resolves a BEGIN ... WHILE ... loop.
+10 : REPEAT ( a a -)   \ AGAIN  \ THEN ;                            ELSE  inserts a false clause in the IF ... THEN conditional.
+11 : ELSE ( a - a)   \ BEGIN  9000 ,  SWAP  \ THEN ;
+12                                                                  FOR  compiles return stack push for a down-counting loop.
+13 : FOR ( - a)   \ >R  \ BEGIN ;                                   NEXT  compiles a backward decrement-and-jump.
+14 : NEXT ( a)   9800 OR, ;
+15
+ 
+                                                     RTX cmForth Version 3.0, March 1990
+　
+     Page# 11         C:CMFORTH.3  
+ 
+ 
+      30                                                               61
+ 0    ( Strings)   HEX                                              STRING  compiles a character string with a
+ 1 FORTH    : STRING ( n )   WORD C@  1 +  EVEN  ALLOT  \\ ;          specified delimiter.
+ 2 COMPILER : ABORT"   COMPILE abort"  22 STRING ;
+ 3          : ."   COMPILE dot"  22 STRING ;                        ABORT"  and  ."  are target versions of previously defined
+ 4          : (   29 WORD DROP ;                                      host words.
+ 5 FORTH    : (   \ ( ;
+ 6                                                                  (  skips over a comment.  It must be defined in both FORTH
+ 7                                                                    and COMPILER.
+ 8
+ 9                                                                  RESET  restores dictionary to power-up status.  It must be the
+10 : RESET   FORGET 0 ;  RECOVER  ' RESET ADR>CALL  ' reset 8 +  !    last word in the dictionary.  It is called by 'reset'.
+11
+12                                                                  Insert application code before this block, to avoid using
+13                                                                    these common target words. Alternatively, 'forget' them.
+14
+15
+ 
+　
